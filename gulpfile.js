@@ -20,7 +20,7 @@ sass.compiler = require('node-sass');
 const jsSources = [
   './src/js/module.js',
   './src/js/index.js'
-]
+];
 
 function copy() {
   return src('./src/assets/*.+(png|jpg|gif|jpeg)')
@@ -58,6 +58,11 @@ function sassFn() {
 
 // * Processes JavaScript
 function scriptsFn() {
+
+  // If there are no js source
+  // files to process return nothing
+  if (!jsSources) return src('./');
+
   return src(jsSources)
     .pipe(sourcemaps.init())
     .pipe(concat('index.js'))
