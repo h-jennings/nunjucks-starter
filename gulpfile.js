@@ -5,22 +5,23 @@ const {
   watch,
   parallel
 } = require("gulp");
+const rename = require("gulp-rename");
+const gulpif = require("gulp-if")
+const del = require("del");
 const sass = require('gulp-sass');
-const concat = require('gulp-concat');
 const autoprefixer = require('gulp-autoprefixer');
-const sourcemaps = require('gulp-sourcemaps');
-const babel = require('gulp-babel');
 const nunjucksRender = require("gulp-nunjucks-render");
 const browserSync = require("browser-sync");
+const browserify = require("browserify");
+const babelify = require("babelify");
+const source = require("vinyl-source-stream");
+const buffer = require("vinyl-buffer");
+const sourcemaps = require("gulp-sourcemaps");
+const uglify = require("gulp-uglify");
+
 browserSync.create();
 
 sass.compiler = require('node-sass');
-
-// JavaScript source file order (for concatenation)
-const jsSources = [
-  './src/js/module.js',
-  './src/js/index.js'
-];
 
 function copy() {
   return src('./src/assets/*.+(png|jpg|gif|jpeg)')
@@ -56,22 +57,45 @@ function sassFn() {
     .pipe(browserSync.stream());
 }
 
+// * Cleans dist folder
+function clean() {
+  return del(['dist/**'])
+}
+
 // * Processes JavaScript
-function scriptsFn() {
 
-  // If there are no js source
-  // files to process return nothing
-  if (!jsSources) return src('./');
+// JavaScript source file order (for concatenation)
+const jsSourceFile = 'index.js';
+const jsSourceFolder = './src/js/'
 
-  return src(jsSources)
-    .pipe(sourcemaps.init())
-    .pipe(concat('index.js'))
-    .pipe(babel({
-      presets: ['@babel/env']
+// dev mode, switch to 'false' for production (uglification)
+const dev = true;
+
+function processJS() {
+  return browserify({
+      entries: [jsSourceFolder + jsSourceFile],
+      debug: true
+    })
+    .transform(babelify, {
+      presets: ["@babel/preset-env"],
+      sourceMaps: true
+    })
+    .bundle()
+    .pipe(source(jsSourceFile))
+    .pipe(rename({
+      basename: 'bundle'
     }))
-    .pipe(sourcemaps.write())
+    .pipe(buffer())
+    .pipe(sourcemaps.init({
+      loadMaps: true
+    }))
+    // if production environment, then uglify code else
+    .pipe(gulpif(!dev, uglify()))
+    .pipe(sourcemaps.write('./'))
     .pipe(dest('./dist/'))
 }
+
+
 
 // * Creates a browsersync instance
 function browser_sync(done) {
@@ -91,14 +115,15 @@ function watchFiles() {
       './src/scss/**/*.scss',
       './src/js/*.js',
       './src/**/*.+(html|nunjucks|njk)'
-    ], series(sassFn, scriptsFn, nunjucks))
-  watch('./src/assets/*.+(png|jpg|gif|jpeg)', copy)
+    ], series(clean, sassFn, processJS, nunjucks))
+  watch('./src/assets/*.+(png|jpg|gif|jpeg)', series(clean, copy))
 }
 
 // Default gulp variable
 // * represents the `gulp` command
-const watchFn = series(sassFn, scriptsFn, nunjucks, parallel(watchFiles, browser_sync));
+const watchFn = series(clean, sassFn, processJS, nunjucks, parallel(watchFiles, browser_sync));
 
 exports.default = watchFn;
 
 exports.copy = copy;
+exports.clean = clean;
